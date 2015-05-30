@@ -1,0 +1,1505 @@
+"""Final Design
+    Gmae name: helicopter shooting
+    Author: Peiyao Chen
+"""
+import pygame
+import random
+import math
+import shell
+pygame.init()
+pygame.mixer.init()
+shell.init()
+
+        
+def changeColor(surface):
+    for col in range(0, surface.get_width()):
+        for row in range(0, surface.get_height()):
+            (r, g, b, a) = surface.get_at((col, row))
+            if a != 0:
+                r = r + 200
+                if r > 255:
+                    r = 255
+                g = g+ 100
+                if g > 255:
+                    g = 255
+                surface.set_at((col, row), (r, g, b , a))
+    return surface
+
+class TextLabel(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.font = pygame.font.SysFont("None", 30)
+        self.text = "POWER"
+        self.image = self.font.render(self.text, 1, (255, 255, 255))
+        self.rect = self.image.get_rect()
+    
+    def update(self):
+        self.image = self.font.render(self.text, 1, (255, 255, 255))
+        self.rect = self.image.get_rect()
+        self.rect.left = 10
+        self.rect.bottom = 530 
+
+
+class ScoreLabel(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.font = pygame.font.SysFont("None", 30)
+        self.text = ""
+        self.image = self.font.render(self.text, 1, (255, 255, 255))
+        self.rect = self.image.get_rect()
+    
+    def update(self):
+        self.image = self.font.render(self.text, 1, (255, 255, 255))
+        self.rect = self.image.get_rect()
+        self.rect.right = 710 
+        self.rect.top = 10 
+
+class PowerRect(pygame.sprite.Sprite):
+    def __init__(self, color, unitwidth):
+        pygame.sprite.Sprite.__init__(self)
+        self.color = color
+        self.power = 30 
+        self.image = pygame.Surface((90, 10))
+        self.image.fill(color)
+        self.rect = self.image.get_rect()
+        self.rect.left = 100 
+        self.rect.bottom = 530 
+        self.unitwidth = unitwidth
+
+    def update(self):
+        if self.power >= 0:
+            self.image = pygame.Surface((self.power * self.unitwidth, 10))
+            self.image.fill(self.color)
+
+    def setPower(self, power):
+        self.power = power
+
+class Shadow(pygame.sprite.Sprite):
+    def __init__(self, picturename):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load(picturename)
+        self.image = self.image.convert_alpha()
+        self.image = pygame.transform.scale(self.image, (30, 61))
+        
+        self.imageMaster = self.image
+        self.rect = self.image.get_rect()
+
+    def rotate(self, dir):
+        oldcenter = self.rect.center
+        self.image = pygame.transform.rotate(self.image, dir)
+        self.rect = self.image.get_rect()
+        self.rect.center = oldcenter
+    
+    def reset(self):
+        self.image = self.imageMaster
+        self.rect = self.image.get_rect()
+        self.rect.center = (3000, 3000)
+
+class Propeller(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load("picture/luoxuan0.png")
+        self.image = self.image.convert_alpha()
+        self.rect = self.image.get_rect()
+        self.imagelist = []
+        self.index = 0
+        self.reset()
+
+    def reset(self):
+        for i in range(0, 8):
+            theImage = pygame.image.load("picture/luoxuan%d.png" %i)
+            theImage = theImage.convert_alpha()
+            self.imagelist.append(theImage)
+
+    def update(self):
+        self.image = self.imagelist[self.index]
+        self.index += 1
+        if self.index > 7:
+            self.index = 0
+class Laser(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.sound = pygame.mixer.Sound("sound/helishoot.ogg")
+        self.sound.set_volume(0.5)
+        self.image = pygame.image.load("picture/laser.png")
+        self.image = self.image.convert_alpha()
+        self.rect = self.image.get_rect()
+        self.dy = 20
+        self.reset()
+
+
+    def update(self):
+        if self.rect.bottom > 0:
+            self.rect.centery -= self.dy
+        else:
+            self.reset()
+
+    def release(self, x, y):
+        self.sound.play()
+        self.rect.center = (x, y)
+
+    def reset(self):
+        self.rect.center = (-2000, -2000)
+        
+        
+class Helicopter(pygame.sprite.Sprite):
+    def __init__(self, propeller):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load("picture/helicopter.png")
+        self.iamge = self.image.convert_alpha()
+        self.imageMaster = self.image
+        self.imageAttacked = pygame.image.load("picture/helicopter.png")
+        self.imageAttacked = self.imageAttacked.convert_alpha()
+        self.imageAttacked = changeColor(self.imageAttacked)
+        self.rect = self.image.get_rect()
+        self.propeller = propeller
+        self.lasers = []
+        for i in range(0, 30):
+            thelaser = Laser()
+            self.lasers.append(thelaser)
+        self.laserIndex = 0
+        self.propeller.rect.center = (self.rect.centerx + 2, self.rect.centery - 5)
+        self.releaseDelay = 2
+        self.releasePause = 0
+        self.live = 30 
+        self.beAttacked = False
+        self.attackedIndex = 0
+        self.shadow = Shadow("picture/helishadow.png")
+
+        self.beginExplode = False
+        self.explode = Explode(100)
+
+        
+        
+    def update(self):
+        if not self.beginExplode:
+            if self.beAttacked:
+                self.attackedIndex += 1
+                if (self.attackedIndex / 3) % 2 == 0:
+                    self.image = self.imageAttacked
+                else:
+                    self.image = self.imageMaster
+                if self.attackedIndex == 9:
+                    self.attackedIndex = 0
+                    self.beAttacked = False
+                    self.image = self.imageMaster
+                    
+            self.rect.center = pygame.mouse.get_pos()
+            self.propeller.rect.center = (self.rect.centerx + 2, self.rect.centery - 5)
+            self.shadow.rect.center = (self.rect.centerx - 20, self. rect.centery - 15)
+            self.check_mouse()
+        else:
+            self.propeller.rect.center = (self.rect.centerx + 2, self.rect.centery - 5)
+            self.shadow.rect.center = (self.rect.centerx - 20, self. rect.centery - 15)
+            
+
+            
+            
+
+
+
+    def check_mouse(self):
+        if pygame.mouse.get_pressed()[0]:
+            self.releasePause += 1
+            if self.releasePause >= self.releaseDelay:
+                self.lasers[self.laserIndex].release(self.rect.centerx, self.rect.centery - 30)
+                self.laserIndex += 1
+                if(self.laserIndex >= 30):
+                    self.laserIndex = 0
+                self.releasePause = 0
+    def attacked(self):
+        self.beAttacked = True
+
+    def toExplode(self):
+        self.beginExplode = True
+        self.explode.start_explode(self.rect.centerx, self.rect.centery)
+        self.rect.center = (1000, 1000)
+
+class Fighter(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+
+        self.timeCount = 0
+        self.stop = False
+
+        self.imageMaster = pygame.image.load("picture/fighter.png")
+        self.iamgeMaster = self.imageMaster.convert_alpha()
+        self.image = self.imageMaster
+        self.imageAttacked = pygame.image.load("picture/fighter.png")
+        self.imageAttacked = self.imageAttacked.convert_alpha()
+        """    
+        for col in range(0, self.imageAttacked.get_width()):
+            for row in range(0, self.imageAttacked.get_height()):
+                (r, g, b, a) = self.imageAttacked.get_at((col, row))
+                if a != 0:
+                    r = r + 200
+                    if r > 255:
+                        r = 255
+                    g = g+ 100
+                    if g > 255:
+                        g = 255
+                    self.imageAttacked.set_at((col, row), (r, g, b , a))
+        """
+        self.imageAttacked = changeColor(self.imageAttacked)
+        self.rect = self.image.get_rect()
+
+        
+        self.propeller = Propeller()
+        self.propeller.rect.center = (self.rect.centerx + 2, self.rect.centery - 5)
+        self.shadow = Shadow("picture/figshadow.png")
+        self.explode = Explode(100)
+        self.dy = 4
+        self.retimes = 0
+        self.lshells = []
+        self.rshells = []
+        self.rindex = 0
+        self.delay = 16 
+        self.pause = 0
+        self.destroyed = False
+        self.rotatetimes = 0
+        self.live = 3
+        self.beattacked = False
+        self.attackedIndex = 0
+        for i in range(0, 30):
+            thershell = shell1(1)
+            self.rshells.append(thershell)
+            thelshell = shell1(0)
+            self.lshells.append(thelshell)
+        
+        self.reset()
+        
+        
+    def update(self):
+        self.timeCount += 1
+        if not self.stop:
+            if self.timeCount == 900:
+                self.dy -= 2
+            if not self.destroyed:
+                if self.beattacked:
+                    if (self.attackedIndex / 2  ) % 2 == 0:
+                        self.image = self.imageAttacked
+                    else:
+                        self.image = self.imageMaster
+                    self.attackedIndex += 1
+                    if self.attackedIndex > 20:
+                        self.attackedIndex = 0
+                        self.beattacked = False
+                        self.image = self.imageMaster
+                        
+                self.propeller.rect.center = (self.rect.centerx + 2, self.rect.centery + 10)
+                self.shadow.rect.center = (self.rect.centerx - 20, self. rect.centery - 15)
+                self.rect.centery += self.dy
+                if self.retimes != 0:
+                    self.pause += 1
+                    if self.pause == self.delay:
+                        self.rshells[self.rindex].release(self.rect.centerx + 10, self.rect.centery + 15)
+                        self.lshells[self.rindex].release(self.rect.centerx - 10, self.rect.centery + 15)
+                        self.retimes += 1
+                        if self.retimes >= 5:
+                            self.retimes = 0
+                        self.rindex += 1
+                        if self.rindex >= 30:
+                            self.rindex = 0
+                        self.pause = 0
+                else:
+                    release = random.randrange(0, 100)
+                    if release == 0:
+                        self.retimes = 1
+                    
+
+                if self.rect.centery > 600:
+                    self.reset()
+
+            else:
+                oldcenter = self.rect.center
+                self.image = pygame.transform.rotate(self.image, 5)
+                self.rect = self.image.get_rect()
+                self.rect.center = oldcenter
+                self.shadow.rotate(5)
+                self.rotatetimes += 1
+                if(self.rotatetimes == 15):
+                    self.rotatetimes = 0
+                    oldcenter = self.rect.center
+                    self.image = pygame.transform.rotate(self.image, -75)
+                    self.rect = self.image.get_rect()
+                    self.rect.center = oldcenter
+                    self.reset()
+                
+            
+
+    def reset(self):
+        self.image = self.imageMaster
+        self.image = self.image.convert_alpha()
+        self.rect = self.image.get_rect()
+        self.rect.centerx = random.randrange(0, 720)
+        self.rect.centery = -100
+        self.shadow.reset()
+        
+        self.destroyed = False
+        self.live = 3
+        self.beattacked = False
+        self.attackedIndex = 0
+        if self.timeCount >= 900:
+            self.stop = True
+
+    def toExplode(self):
+        self.explode.start_explode(self.rect.centerx, self.rect.centery)
+        self.propeller.rect.center = (-1000, -1000)
+        self.destroyed = True
+
+    def attacked(self):
+        self.beattacked = True
+        self.live -= 1
+
+
+        
+
+
+class Glow(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load("picture/glow.png")
+        for col in range(0, self.image.get_width()):
+            for row in range(0, self.image.get_height()):
+                (r, g, b, a) = self.image.get_at((col, row))
+                self.image.set_at((col, row), (r, g, b, int(0.5 * a)))
+        self.image = self.image.convert_alpha()
+        self.image.set_colorkey((0, 0, 0))
+        self.rect = self.image.get_rect()
+
+class Explode(pygame.sprite.Sprite):
+    def __init__(self, size):
+        pygame.sprite.Sprite.__init__(self)
+        self.sound = pygame.mixer.Sound("sound/explode.ogg")
+        self.size = size
+        self.image = pygame.image.load("picture/explode0.png")
+        self.iamge = self.image.convert_alpha()
+        self.image = pygame.transform.scale(self.image, (self.size, self.size))
+        self.rect = self.image.get_rect()
+        self.index = 0
+        self.havePlayed = False
+        self.imagelist = []
+        self.start = False
+        self.glow = Glow()
+        self.glowIndex = 0
+        self.rect.center = (-100, 100)
+        self.glow.rect.center = self.rect.center
+        self.star = Star()
+        self.star.rect.center = (3000, 3000)
+        self.aid = Aid()
+        self.aid.rect.center = (3000, 3000)
+        self.reset()
+    
+    def reset(self):
+        for i in range(0, 23):
+            theimage = pygame.image.load("picture/explode%d.png" %i)
+            theimage = theimage.convert_alpha()
+            theimage = pygame.transform.scale(theimage, (self.size, self.size))
+            self.imagelist.append(theimage)
+
+    def update(self):
+        self.glow.rect.center = self.rect.center
+        if self.start:
+            if random.randrange(0, 50) == 0 and self.star.exist == False:
+                self.star.exist = True
+                self.star.rect.center = self.rect.center
+            
+            if random.randrange(0, 200) == 0 and self.aid.exist == False:
+                self.aid.exist = True
+                self.aid.rect.center = self.rect.center
+
+            self.image = self.imagelist[self.index]
+            self.index += 1
+            self.glowIndex += 1
+            if self.glowIndex < 12: 
+                self.glow.image = pygame.transform.scale(self.glow.image, (30*self.glowIndex, 30*self.glowIndex))
+                self.glow.rect = self.glow.image.get_rect()
+                self.glow.rect.center = self.rect.center
+
+            else:
+                self.glow.image = pygame.transform.scale(self.glow.image, (360 - 30 * (self.glowIndex - 12), \
+                        360 - 30 * (self.glowIndex - 12)))
+                self.glow.rect = self.glow.image.get_rect()
+                self.glow.rect.center = self.rect.center
+            if(self.index == 23):
+                self.index = 0
+                self.start = False
+                self.rect.center = (-200, -200)
+                self.havePlayed = False
+                self.glowIndex = 0
+            
+
+    def start_explode(self, x, y):
+        if not self.havePlayed:
+            self.sound.play()
+            self.rect.center = (x, y)
+            self.start = True
+            self.havePlayed = True
+
+class Tank(pygame.sprite.Sprite):
+    def __init__(self, direction, stopx, resetx):
+        pygame.sprite.Sprite.__init__(self)
+        
+        self.stop = False
+        self.timeCount = 0
+        
+        self.image = pygame.image.load("picture/tankbody.png")
+        self.image = self.image.convert_alpha()
+        self.rect = self.image.get_rect()
+        self.dir = direction
+        self.dx = 0
+        self.dy = 2
+        self.live = 2
+        self.stopx = stopx
+        self.resetx = resetx
+        self.artillery = Artillery("picture/artillery.png", "picture/shell2.png", 1, 50, 10)
+        self.reset()
+        self.destroyed = False
+        self.explode = Explode(100)
+        if self.dir == 0:
+            angle = 90
+        else:
+            angle = -90
+        oldcenter = self.rect.center
+        self.image = pygame.transform.rotate(self.image, angle)
+        self.rect = self.image.get_rect()
+        self.rect.center = oldcenter
+
+
+    def reset(self):
+        if self.dir == 0:
+            self.rect.centerx = -self.resetx
+            self.dx = 2
+        else:
+            self.rect.centerx = 720 + self.resetx
+            self.dx = -2
+        self.rect.centery = random.randrange(0, 100)
+        self.artillery.reset()
+        self.live = 2
+        if self.timeCount >= 900:
+            self.stop = True
+        
+    def update(self):
+        self.timeCount += 1
+        if not self.stop: 
+            if self.timeCount == 900:
+                self.dy -= 2
+            if self.dir == 0 and self.rect.centerx <= self.stopx:
+                self.rect.centerx += self.dx
+
+            if self.dir == 1 and self.rect.centerx >= self.stopx:
+                self.rect.centerx += self.dx
+            self.rect.centery += self.dy
+            if self.rect.top > 600:
+                self.reset()
+                self.artillery.reset()
+        if self.dir == 0:
+            self.artillery.rect.center = (self.rect.centerx + 10, self.rect.centery)
+        else:
+            self.artillery.rect.center = (self.rect.centerx - 10, self.rect.centery)
+
+    def toExplode(self):
+        self.explode.start_explode(self.rect.centerx, self.rect.centery)
+        self.reset()
+
+    def attacked(self):
+        self.live -= 1
+        
+class Artillery(pygame.sprite.Sprite):
+    def __init__(self, picturename, shellname, IsFollowMouse, frequency, speed):
+        pygame.sprite.Sprite.__init__(self)
+        self.imageMaster = pygame.image.load(picturename)
+        self.imageMaster = self.imageMaster.convert_alpha()
+        self.image = self.imageMaster
+        self.rect = self.image.get_rect()
+        self.shells = []
+        self.rdelay = 2
+        self.rpause = 0
+        self.picture = picturename
+        self.haveReleased = False
+        self.retimes = 0
+        self.shellindex = 0
+        self.IsFollowMouse = IsFollowMouse
+        self.frequency = frequency
+        for i in range(0, 30):
+            theshell = shell2(shellname, speed)
+            self.shells.append(theshell)
+        self.reset()
+
+    def reset(self):
+        self.image = pygame.image.load(self.picture)
+        self.image = self.image.convert_alpha()
+        self.haveReleased = False
+
+    def update(self):
+        self.followMouse()
+        self.rotate()
+        if self.haveReleased:
+            self.release()
+        else:
+            if random.randrange(0, self.frequency) == 0:
+                self.haveReleased = True
+
+    def followMouse(self):
+        if self.IsFollowMouse:
+            dx = pygame.mouse.get_pos()[0] - self.rect.centerx
+            dy = pygame.mouse.get_pos()[1] - self.rect.centery
+
+            dy *= -1
+            radians = math.atan2(dy, dx)
+            self.dir = radians * 180/math.pi + 90
+            
+        else:
+            self.dir = 0 
+
+    def rotate(self):
+        oldcenter = self.rect.center
+        self.image = pygame.transform.rotate(self.imageMaster, self.dir)
+        self.rect = self.image.get_rect()
+        radians = (self.dir - 90) * math.pi / 180
+        dx = math.cos(radians) * 10
+        dy = math.sin(radians) * (-10)
+        self.rect.center = (oldcenter[0] + dx, oldcenter[1] + dy)
+
+    def release(self):
+        self.rpause += 1
+        if self.rpause == self.rdelay:
+
+            radians = (self.dir - 90) * math.pi / 180
+            x = self.rect.centerx + math.cos(radians) * 30
+            y = self.rect.centery - math.sin(radians) * 30
+            self.shells[self.shellindex].release(self.dir, x, y)
+            self.retimes += 1
+            self.shellindex += 1
+            if self.shellindex == 29:
+                self.shellindex =0
+            if self.retimes == 1:
+                self.retimes = 0
+                self.haveReleased = False
+            self.rpause = 0
+    
+            
+            
+
+
+            
+        
+class Background(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load("picture/bg.png")
+        self.image = self.image.convert()
+        self.rect = self.image.get_rect()
+        self.rect.bottom = 540
+        self.rect.left = 0
+        self.dy = 2
+        self.timeCount = 0
+
+    def update(self):
+        self.timeCount += 1
+        if self.timeCount < 900:
+            self.rect.centery += 3
+            if self.rect.bottom >= 1740:
+                self.rect.bottom = 540
+        
+            
+class Soldier(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        
+        self.timeCount = 0
+        self.stop = False
+
+        self.image = pygame.image.load("picture/walking0.png")
+        self.rect = self.image.get_rect()
+        self.shells = []
+        self.rdelay = 2
+        self.rpause = 0
+        self.haveReleased = False
+        self.retimes = 0
+        self.shellindex = 0
+        self.walkimages = [] 
+        self.dieimages = []
+        self.walkindex = 0
+        self.dieindex = 0
+        self.dy = 3
+        self.dying = False
+        self.live = 2
+        self.sound = pygame.mixer.Sound("sound/cry.ogg")
+        
+        i = 0
+        while i < 16:
+            theimage = pygame.image.load("picture/walking%d.png" %i)
+            theimage = theimage.convert_alpha()
+            self.walkimages.append(theimage)
+            i += 1
+
+        i = 0
+        while i < 10:
+            theimage = pygame.image.load("picture/die%d.png" %i)
+            theimage = theimage.convert_alpha()
+            self.dieimages.append(theimage)
+            i += 1
+        theimage = pygame.image.load("picture/die9.png")
+        theimage = theimage.convert_alpha()
+        for t in range(0, 30):
+            self.dieimages.append(theimage)
+        for i in range(0, 30):
+            theshell = shell2("picture/shell3.png", 10)
+            self.shells.append(theshell)
+        self.reset()
+
+    def reset(self):
+        self.haveReleased = False
+        self.walkindex = 0
+        self.rect.center = (random.randrange(50, 500), -100)
+        self.dying = False
+        self.dieindex = 0
+        self.live = 2
+        if self.timeCount >= 900:
+            self.stop = True
+
+        
+
+    def update(self):
+        self.timeCount += 1
+        if not self.stop:
+            if self.timeCount == 900:
+                self.dy -= 2
+            if not self.dying:
+                self.rect.centery += self.dy
+                self.followMouse()
+                self.rotate()
+                self.walkindex += 1
+                if self.walkindex > 9:
+                    self.walkindex = 0
+                self.rect.centery +=self.dy
+                if self.haveReleased:
+                    self.release()
+                else:
+                    if random.randrange(0, 20) == 0:
+                        self.haveReleased = True
+                if self.rect.top > 540:
+                    self.reset()
+            else:
+                self.die()
+                if self.timeCount >= 900:
+                    self.dy = 0
+                else:
+                    self.rect.centery += 3
+                    
+
+
+    def followMouse(self):
+        dx = pygame.mouse.get_pos()[0] - self.rect.centerx
+        dy = pygame.mouse.get_pos()[1] - self.rect.centery
+
+        dy *= -1
+        radians = math.atan2(dy, dx)
+        self.dir = radians * 180/math.pi + 90
+
+    def rotate(self):
+        oldcenter = self.rect.center
+        self.image = pygame.transform.rotate(self.walkimages[self.walkindex], self.dir)
+        self.rect = self.image.get_rect()
+        self.rect.center = oldcenter
+
+    def release(self):
+        self.rpause += 1
+        if self.rpause == self.rdelay:
+
+            radians = (self.dir - 90) * math.pi / 180
+            x = self.rect.centerx + math.cos(radians) * 30
+            y = self.rect.centery - math.sin(radians) * 30
+            self.shells[self.shellindex].release(self.dir, x, y)
+            self.retimes += 1
+            self.shellindex += 1
+            if self.shellindex == 29:
+                self.shellindex =0
+            if self.retimes == 1:
+                self.retimes = 0
+                self.haveReleased = False
+            self.rpause = 0
+
+    def toExplode(self):
+        if not self.dying:
+            self.sound.play()
+        self.dying = True
+
+    def die(self):
+        self.image = self.dieimages[self.dieindex]
+        self.dieindex += 1
+        if(self.dieindex > 39):
+            self.reset()
+            
+class Star(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load("picture/star.png")
+        self.image = self.image.convert_alpha()
+        self.rect = self.image.get_rect()
+        self.glow = Glow()
+        self.exist = False
+        self.dy = 2
+        self.sound = pygame.mixer.Sound("sound/getstar.ogg")
+        self.sound.set_volume(4)
+
+    def update(self):
+        self.glow.image = pygame.transform.scale(self.glow.image, (100, 100))
+        self.glow.rect = self.glow.image.get_rect()
+        self.glow.rect.center = self.rect.center
+        self.rect.centery += self.dy
+        if self.rect.top > 550:
+            self.reset()
+
+    def reset(self):
+        self.rect.center = (3000, 3000)
+        self.exist = False
+
+        
+class Aid(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load("picture/aid.png")
+        self.image = self.image.convert_alpha()
+        self.rect = self.image.get_rect()
+        self.glow = Glow()
+        self.exist = False
+        self.dy = 2
+        self.sound = pygame.mixer.Sound("sound/aid.ogg")
+        self.sound.set_volume(4)
+
+    def update(self):
+        self.glow.image = pygame.transform.scale(self.glow.image, (100, 100))
+        self.glow.rect = self.glow.image.get_rect()
+        self.glow.rect.center = self.rect.center
+        self.rect.centery += self.dy
+        if self.rect.top > 550:
+            self.reset()
+
+    def reset(self):
+        self.rect.center = (3000, 3000)
+        self.exist = False
+
+
+class Boss(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load("picture/bossbody.png")
+        self.image = self.image.convert_alpha()
+        self.imageMaster = self.image
+        
+        self.imageAttacked = pygame.image.load("picture/bossbody.png")
+        self.imageAttacked = self.imageAttacked.convert_alpha()
+        self.imageAttacked = changeColor(self.imageAttacked)
+        
+        self.beAttacked = False
+        self.attackedIndex = 0
+
+        self.rect = self.image.get_rect()
+        self.dx = 2 
+        self.dy = 0
+        self.live = 300 
+        self.dir = 0
+        self.artillery = Artillery("picture/bossartillery.png", "picture/shell4.png", 1, 70, 20)
+        self.artillery1 = Artillery("picture/bossartillery3.png", "picture/shell2.png", 0, 40, 15)
+        self.artillery4 = Artillery("picture/bossartillery3.png", "picture/shell2.png", 0, 40, 15)
+        self.artillery3 = Artillery("picture/bossartillery4.png", "picture/shell3.png", 1, 10, 10)
+        self.artillery2 = Artillery("picture/bossartillery4.png", "picture/shell3.png", 1, 10, 10)
+        
+        self.artilleryList = [self.artillery, self.artillery1, self.artillery2, self.artillery3, self.artillery4]
+
+        self.reset()
+
+        self.destroyed = False
+        self.explode = Explode(120)
+        self.explode2 = Explode(150)
+        self.explode3 = Explode(100)
+        self.explodeList = [self.explode, self.explode2, self.explode3]
+        self.explodeCount = 0
+        self.beginExplode = False
+        
+
+        
+        angle = 90
+        oldcenter = self.rect.center
+        self.image = pygame.transform.rotate(self.image, angle)
+        self.imageMaster = pygame.transform.rotate(self.imageMaster, angle)
+        self.imageAttacked = pygame.transform.rotate(self.imageAttacked, angle)
+        self.rect = self.image.get_rect()
+        self.rect.center = oldcenter
+        
+        self.powerRect = PowerRect((0, 0, 255), 2)
+        self.powerRect.power = self.live
+        self.powerRect.rect.left = 30
+        self.powerRect.rect.top = 10
+
+    def reset(self):
+        self.rect.centerx = -100
+        self.rect.centery =  100
+        for i in range(0, 5):
+            self.artilleryList[i].reset()
+        self.beAttacked = False
+        self.explodeCount = 0
+        self.beginExplode = False
+
+        
+    def update(self):
+        self.powerRect.power = self.live
+        if self.beAttacked:
+            self.attackedIndex += 1
+            if (self.attackedIndex / 2) % 2 == 0:
+                self.image = self.imageAttacked
+            else:
+                self.image = self.imageMaster
+            if self.attackedIndex >= 20:
+                self.beAttacked = False
+                self.attackedIndex = 0
+                self.image = self.imageMaster
+
+
+        if self.dir == 0:
+            self.rect.centerx += self.dx
+        else:
+            self.rect.centerx -= self.dx
+        if self.dir == 0 and self.rect.right >= 720:
+            self.dir = 1
+        if self.dir == 1 and self.rect.left <= 0:
+            self.dir = 0
+
+        self.rect.centery += self.dy
+        if self.rect.centery > 600:
+            self.reset()
+            self.artillery.reset()
+            for i in range(0, 5):
+                self.artilleryList[i].reset()
+            
+        self.artillery.rect.center = (self.rect.centerx, self.rect.centery)
+        self.artillery1.rect.center = (self.rect.centerx - 26, self.rect.centery - 27)
+        self.artillery2.rect.center = (self.rect.centerx + 26, self.rect.centery - 43)
+        self.artillery3.rect.center = (self.rect.centerx - 26, self.rect.centery + 25)
+        self.artillery4.rect.center = (self.rect.centerx + 26, self.rect.centery + 42)
+
+        if self.beginExplode:
+            self.explodeCount += 1
+            if self.explodeCount == 1:
+                self.explode.start_explode(self.rect.centerx, self.rect.centery)
+            if self.explodeCount == 5:
+                self.explode2.start_explode(self.rect.centerx + 50, self.rect.centery)
+            if self.explodeCount == 10:
+                self.explode3.start_explode(self.rect.centerx - 50, self.rect.centery)
+            if self.explodeCount >= 15:
+                self.reset()
+
+    def toExplode(self):
+        self.beginExplode = True
+        self.dx = 0
+        
+
+    def attacked(self):
+        self.live -= 1
+        self.beAttacked = True
+class Line(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.Surface((720, 540))
+        self.image.set_colorkey((0, 0, 0))
+        self.rect = self.image.get_rect()
+        self.start = (1, 0)
+        self.end = (0, 10)
+
+    def updtate(self):
+        pygame.draw.line(self.image, (255, 0, 0), self.start, self.end, 5)
+        
+def Game():
+    screen = pygame.display.set_mode((720, 540))
+    background = Background()
+    pygame.mouse.set_visible(False)
+
+    line = Line()
+    
+    clock = pygame.time.Clock()
+    keepGoing = True
+    powerLabel = TextLabel()
+    powerRect = PowerRect((255, 0, 0), 3)
+    addpower = 0
+    shells = []
+    propeller = Propeller()
+    helicopter = Helicopter(propeller)
+    fighters = []
+    soldiers = []
+    tanks = []
+    shells = []
+    stars = []
+    aids = []
+    winCount = 0
+    winOut = False
+    loseCount = 0
+    loseOut = False
+
+    scoreLabel = ScoreLabel()
+    score = 0
+    scoreLabel.text = "SCORE: %d" %score
+    scoreLabel.rect.right = 710
+    scoreLabel.rect.top = 10
+    toScore = 0
+    
+
+    BGsprite = pygame.sprite.OrderedUpdates(background)
+    enemySprites = pygame.sprite.OrderedUpdates()
+    
+    boss = Boss()
+    BossSprite = pygame.sprite.OrderedUpdates(boss)
+    BossSprite.add(boss.artilleryList)
+    BossSprite.add(boss.explode.glow)
+    BossSprite.add(boss.explodeList)
+    BossSprite.add(boss.powerRect)
+    for i in range(0, 5):
+        BossSprite.add(boss.artilleryList[i].shells)
+        shells.append(boss.artilleryList[i].shells)
+
+
+    bosses = [boss]
+
+    for i in range(0, 3):
+        soldier = Soldier()
+        enemySprites.add(soldier)
+        enemySprites.add(soldier.shells)
+        soldiers.append(soldier)
+        shells.append(soldier.shells)
+        
+    for i in range(0, 2):
+        tank = Tank(0, 270 - 50*i, 100 + 50*i)
+        enemySprites.add(tank.explode.star.glow)
+        enemySprites.add(tank.explode.star)
+        enemySprites.add(tank.explode.aid.glow)
+        enemySprites.add(tank.explode.aid)
+        enemySprites.add(tank)
+        enemySprites.add(tank.artillery)
+        enemySprites.add(tank.artillery.shells)
+        enemySprites.add(tank.explode.glow)
+        enemySprites.add(tank.explode)
+        tanks.append(tank)
+        shells.append(tank.artillery.shells)
+        stars.append(tank.explode.star)
+        aids.append(tank.explode.aid)
+
+    for i in range(0, 2):
+        tank = Tank(1, 300 + 50*i, 100 + 50*i)
+        enemySprites.add(tank.explode.star.glow)
+        enemySprites.add(tank.explode.star)
+        enemySprites.add(tank.explode.aid.glow)
+        enemySprites.add(tank.explode.aid)
+        enemySprites.add(tank)
+        enemySprites.add(tank.artillery)
+        enemySprites.add(tank.artillery.shells)
+        enemySprites.add(tank.explode.glow)
+        enemySprites.add(tank.explode)
+        tanks.append(tank)
+        shells.append(tank.artillery.shells)
+        stars.append(tank.explode.star)
+        aids.append(tank.explode.aid)
+
+    for i in range(0, 2):
+        fighter = Fighter()
+        enemySprites.add(fighter.shadow)
+        enemySprites.add(fighter.explode.star.glow)
+        enemySprites.add(fighter.explode.star)
+        enemySprites.add(fighter.explode.aid.glow)
+        enemySprites.add(fighter.explode.aid)
+        enemySprites.add(fighter)
+        enemySprites.add(fighter.propeller)
+        enemySprites.add(fighter.lshells)
+        enemySprites.add(fighter.rshells)
+        enemySprites.add(fighter.explode.glow)
+        enemySprites.add(fighter.explode)
+        fighters.append(fighter)
+        shells.append(fighter.lshells)
+        shells.append(fighter.rshells)
+        stars.append(fighter.explode.star)
+        aids.append(fighter.explode.aid)
+    
+    
+
+    friendSprites = pygame.sprite.OrderedUpdates(powerLabel, powerRect, scoreLabel,\
+            helicopter.shadow, helicopter, propeller, helicopter.lasers,\
+            line, helicopter.explode.glow, helicopter.explode)
+    pygame.mouse.set_pos([360, 640])
+    while keepGoing:
+        
+        clock.tick(30)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                keepGoing = False
+                return -1
+                
+        line.start = helicopter.rect.center
+        line.end = tanks[0].artillery.rect.center
+        for thelaser in helicopter.lasers:
+            attackEnemy = pygame.sprite.spritecollide(thelaser, fighters + tanks + bosses , False)
+            if attackEnemy:
+                thelaser.reset()
+                for theEnemy in attackEnemy:
+                    if(theEnemy.rect.bottom > 0):
+                        theEnemy.attacked()
+                        if theEnemy.live == 0:
+                            theEnemy.toExplode()
+        
+        for thelaser in helicopter.lasers:
+            attackEnemy = pygame.sprite.spritecollide(thelaser, soldiers, False)
+            if attackEnemy:
+                for theEnemy in attackEnemy:
+                    if(theEnemy.rect.bottom > 0):
+                        theEnemy.live -= 1
+                        if theEnemy.live == 0:
+                            theEnemy.toExplode()
+        for i in range(0, len(shells)):
+            heliAttacked = pygame.sprite.spritecollide(helicopter, shells[i], False)
+            if heliAttacked:
+                for theshell in heliAttacked:
+                    dx = helicopter.rect.centerx - theshell.rect.centerx
+                    dy = helicopter.rect.centery - theshell.rect.centery
+                    dis = math.sqrt(dx * dx +  dy * dy)
+                    if dis < 30 and theshell.rect.top < 540:
+                        theshell.reset()
+                        helicopter.attacked()
+                        helicopter.live -= 1
+                        powerRect.power = helicopter.live
+                        if helicopter.live == 0:
+                            helicopter.toExplode()
+        hitStar = pygame.sprite.spritecollide(helicopter, stars, False)
+        if hitStar:
+            for thestar in hitStar:
+                toScore += 100 
+                thestar.sound.play()
+                thestar.reset()
+
+        if score < toScore:
+            score += 2 
+            scoreLabel.text = "Score: %d" %score
+
+
+        hitAid = pygame.sprite.spritecollide(helicopter, aids, False)
+        if hitAid:
+            for theAid in hitAid:
+                theAid.sound.play()
+                addpower += 20
+                theAid.reset()
+            
+        if addpower > 0:
+            if helicopter.live == 30:
+                addpower = 0
+            else:
+                addpower -= 1
+                helicopter.live += 1
+                powerRect.power = helicopter.live
+        if helicopter.live == 0:
+            loseOut = True
+        if boss.live == 0:
+            winOut = True 
+
+        if loseOut:
+            loseCount += 1
+            if loseCount == 90:
+                return -2
+        
+        if winOut:
+            winCount += 1
+            if winCount == 90:
+                return score
+        
+        BGsprite.update()
+        BGsprite.draw(screen)
+        enemySprites.update()
+        enemySprites.draw(screen)
+        
+        if background.timeCount > 900:
+            BossSprite.update()
+            BossSprite.draw(screen)
+            
+            
+        friendSprites.update()
+        friendSprites.draw(screen)
+        pygame.display.flip()
+        
+class Button(pygame.sprite.Sprite):
+    def __init__(self, pictureNotOn, pictureOn, isMenu, position, dir = 0):
+        pygame.sprite.Sprite.__init__(self)
+        self.imageNotOn = pygame.image.load(pictureNotOn)
+        self.imageNotOn = self.imageNotOn.convert_alpha()
+        self.imageOn = pygame.image.load(pictureOn)
+        self.imageOn = self.imageOn.convert_alpha()
+        self.image = self.imageNotOn
+        self.rect = self.image.get_rect()
+
+        if dir == 1:
+            self.dx = 80 
+            self.rect.center = (-200, position[1])
+
+        else:
+            self.dx = -80
+            self.rect.center = (920, position[1])
+
+
+        self.oldscale = self.imageNotOn.get_size()
+        self.oldcenter =  position
+        self.index = 30
+        
+    
+        self.IsOn = False
+        self.isMenu = isMenu 
+        self.haveMoved = False
+        
+        if self.isMenu:
+            self.sound = pygame.mixer.Sound("sound/button.ogg")
+        self.soundHavePlayed = False
+
+    def update(self):
+        if (not self.haveMoved) and self.isMenu:
+            print "move"
+            """
+            self.image = pygame.transform.scale(self.image, (int(self.oldscale[0] / self.index), int(self.oldscale[1] / self.index)))
+            self.rect = self.image.get_rect()
+            self.rect.center = self.oldcenter
+            self.index -= 2
+            if self.index == 0:
+                self.index = 1
+            if self.index < 0:
+                self.haveMoved = True
+                self.index = 30
+            """
+
+            self.rect.centerx += self.dx
+            if self.rect.centerx == 360:
+                self.haveMoved = True
+        
+        else:
+            (mousex, mousey) = pygame.mouse.get_pos()
+            if mousex > self.rect.left and mousex < self.rect.right \
+                    and mousey > self.rect.top and mousey < self.rect.bottom:
+                        if self.isMenu:
+                            if self.soundHavePlayed == False:
+                                self.sound.play()
+                                self.soundHavePlayed = True
+                        self.image = self.imageOn
+                        self.IsOn = True
+
+            else:
+                self.image = self.imageNotOn
+                self.IsOn = False
+                self.soundHavePlayed = False
+
+class Text(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.font = pygame.font.SysFont("None", 40)
+        self.text = "Loading..."
+        self.image = self.font.render(self.text, 1, (255, 255, 255))
+        self.rect = self.image.get_rect()
+        self.rect.center = (360, 216)
+
+    def update(self):
+        self.image = self.font.render(self.text, 1, (255, 255, 255))
+
+
+class ImageShow(pygame.sprite.Sprite):
+    def __init__(self, picture):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load(picture)
+        self.image = self.image.convert_alpha()
+        self.rect = self.image.get_rect()
+
+
+        
+        
+
+    
+        
+        
+def Entrance():
+    sound = pygame.mixer.Sound("sound/buttonpress.ogg")
+    pygame.mouse.set_visible(True)
+    screen = pygame.display.set_mode((720, 540))
+    background = pygame.image.load("picture/entrance/EntranceBG.png")
+    background = background.convert()
+    screen.blit(background, (0, 0))
+    pygame.display.flip()
+
+    PlayGame = Button("picture/entrance/PlayGame1.png", "picture/entrance/PlayGame2.png", True, (360, 266), 1)
+    #PlayGame.rect.center = (360, 266)
+
+    HowToPlay = Button("picture/entrance/HowToPlay1.png", "picture/entrance/HowToPlay2.png", True, (360, 346), 0)
+    #HowToPlay.rect.center = (360, 346)
+    
+
+    About = Button("picture/entrance/About1.png", "picture/entrance/About2.png", True, (360, 426), 1)
+    #About.rect.center = (360, 426)
+
+    MenuSprites = pygame.sprite.OrderedUpdates(PlayGame, HowToPlay, About)
+    loadingText = Text()
+    LoadingSprite = pygame.sprite.OrderedUpdates(loadingText)
+    
+
+    KeepGoing = True
+
+    clock = pygame.time.Clock()
+
+    while KeepGoing:
+        
+        clock.tick(30)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                KeepGoing = False
+                return -1
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if PlayGame.IsOn:
+                    sound.play()
+                    MenuSprites.clear(screen, background)
+                    LoadingSprite.update()
+                    MenuSprites.update()
+                    LoadingSprite.draw(screen)
+                    MenuSprites.draw(screen)
+                    pygame.display.flip()
+                    return 1
+
+                elif HowToPlay.IsOn:
+                    sound.play()
+                    return 2
+
+                elif About.IsOn:
+                    sound.play()
+                    return 3
+                       
+                    
+
+        
+        MenuSprites.clear(screen, background)
+        MenuSprites.update()
+        MenuSprites.draw(screen)
+        pygame.display.flip()
+
+    return 0
+
+        
+def Instruction():
+    sound = pygame.mixer.Sound("sound/buttonpress.ogg")
+    screen = pygame.display.set_mode((720, 540))
+    background = pygame.image.load("picture/entrance/EntranceBG.png")
+    background = background.convert()
+    screen.blit(background, (0, 0))
+    pygame.display.flip()
+    
+    back = Button("picture/entrance/back1.png", "picture/entrance/back2.png", False, (700, 520))
+    back.rect.right = 700
+    back.rect.bottom = 520
+    InstructionState = ImageShow("picture/entrance/Instruction.png")
+    InstructionState.rect.center = (300, 300)
+
+    InstructionSprites = pygame.sprite.OrderedUpdates(back, InstructionState)
+
+    KeepGoing = True
+
+    clock = pygame.time.Clock()
+
+    while KeepGoing:
+        clock.tick(30)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                KeepGoging = False
+                return -1
+            
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if back.IsOn:
+                    sound.play()
+                    KeepGoing = False
+                    return 0
+
+        InstructionSprites.clear(screen, background)
+        InstructionSprites.update()
+        InstructionSprites.draw(screen)
+        pygame.display.flip()
+        
+        
+
+
+    
+
+def About():
+    sound = pygame.mixer.Sound("sound/buttonpress.ogg")
+    screen = pygame.display.set_mode((720, 540))
+    background = pygame.image.load("picture/entrance/EntranceBG.png")
+    background = background.convert()
+    screen.blit(background, (0, 0))
+    pygame.display.flip()
+    
+    back = Button("picture/entrance/back1.png", "picture/entrance/back2.png", False, (700, 520))
+    back.rect.right = 700
+    back.rect.bottom = 520
+    AboutState = ImageShow("picture/entrance/AboutState.png")
+    AboutState.rect.center = (300, 300)
+
+    AboutSprites = pygame.sprite.OrderedUpdates(back, AboutState)
+
+    KeepGoing = True
+
+    clock = pygame.time.Clock()
+
+    while KeepGoing:
+        clock.tick(30)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                KeepGoging = False
+                return -1
+            
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if back.IsOn:
+                    sound.play()
+                    KeepGoing = False
+                    return 0
+
+        AboutSprites.clear(screen, background)
+        AboutSprites.update()
+        AboutSprites.draw(screen)
+        pygame.display.flip()
+        
+
+def win(score):
+    sound = pygame.mixer.Sound("sound/buttonpress.ogg")
+    pygame.mouse.set_visible(True)
+    screen = pygame.display.set_mode((720, 540))
+    background = pygame.image.load("picture/win/WinBG.png")
+    background = background.convert()
+    font = pygame.font.SysFont("None", 50)
+    scoreLabel = font.render(str(score), 1, (0, 0, 0))
+    background.blit(scoreLabel, (225, 378))
+    
+    screen.blit(background, (0, 0))
+    pygame.display.flip()
+    
+    menu = Button("picture/win/menu1.png", "picture/win/menu2.png", False, (700, 520))
+    menu.rect.right = 700
+    menu.rect.bottom = 520
+
+    AboutSprites = pygame.sprite.OrderedUpdates(menu)
+
+    KeepGoing = True
+
+    clock = pygame.time.Clock()
+
+    while KeepGoing:
+        clock.tick(30)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                KeepGoging = False
+                return -1
+            
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if menu.IsOn:
+                    sound.play()
+                    KeepGoing = False
+                    return 0
+
+        AboutSprites.clear(screen, background)
+        AboutSprites.update()
+        AboutSprites.draw(screen)
+        pygame.display.flip()
+        
+
+
+def lose():
+    sound = pygame.mixer.Sound("sound/buttonpress.ogg")
+    pygame.mouse.set_visible(True)
+    screen = pygame.display.set_mode((720, 540))
+    background = pygame.image.load("picture/lose/LoseBG.png")
+    background = background.convert()
+    screen.blit(background, (0, 0))
+    pygame.display.flip()
+    
+    menu = Button("picture/lose/menu1.png", "picture/lose/menu2.png", False, (700, 520))
+    menu.rect.right = 700
+    menu.rect.bottom = 520
+
+    AboutSprites = pygame.sprite.OrderedUpdates(menu)
+
+    KeepGoing = True
+
+    clock = pygame.time.Clock()
+
+    while KeepGoing:
+        clock.tick(30)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                KeepGoging = False
+                return -1
+            
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if menu.IsOn:
+                    sound.play()
+                    KeepGoing = False
+                    return 0
+
+        AboutSprites.clear(screen, background)
+        AboutSprites.update()
+        AboutSprites.draw(screen)
+        pygame.display.flip()
+        
+
+    
+def main():
+    KeepGoing = True
+    while KeepGoing:
+        
+        bgmusic = pygame.mixer.music.load("sound/DARK_KNIGHT.ogg")
+        pygame.mixer.music.play()
+        EntranceResult = Entrance()
+
+        if EntranceResult == 1:
+            pygame.mixer.music.stop()
+            gamemusic = pygame.mixer.Sound("sound/GameBG.ogg")
+            gamemusic.play(-1)
+            GameResult = Game()
+            if GameResult == -1:
+                KeepGoing = False
+
+            elif GameResult == -2:
+                LoseResult = lose()
+                gamemusic.stop() 
+                if LoseResult == -1:
+                    KeepGoing = False
+            elif GameResult >= 0 :
+                WinResult = win(GameResult)
+                gamemusic.stop()
+                if WinResult == -1:
+                    KeepGoing = False
+                
+
+        elif EntranceResult == 2:
+            InstructionResult = Instruction()
+            if InstructionResult == -1:
+                KeepGoing = False
+
+        elif EntranceResult == 3:
+            AboutResult = About()
+            if AboutResult == -1:
+                KeepGoing = False
+
+
+        
+        
+        elif EntranceResult == -1:
+            KeepGoing = False
+
+                
+
+        
+    
+
+
+if __name__ == "__main__":
+    main()
+

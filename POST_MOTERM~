@@ -1,0 +1,69 @@
+POST-MOTERM
+
+
+WHAT WENT WELL
+==============
+1.Cllision between sprites
+
+2.Enemies can shoot toward helicopter(rotate follow your mouse)
+
+3.Animations played well
+
+4.While attacked, the fighters or helicopter will change their images' color
+  to yellow,which can better show the attack.I use Surface.get_at() and 
+  Surface.set_at() function to achieve that.
+
+5.I think my menu and buttons are beautiful and cool
+
+
+WHAT WAS DIFFICULT
+==================
+1.Change the alpha of the image. I have tried the function set_alpha(), but it
+  can not work. Finally, I use get_at() and set_at() functions to modify each
+  pixel's ARGB and solve the problem
+
+2.Change the RGB of iamge. It is similar to the above problem. I wanted to
+  change the color to yellow when the fighters and helicopter are being attacked.
+
+3.Make the shells shooting toward helicopter accurately. It is the largest
+  difficulties I met in the project. At the beginning, I calculate the direction
+  the shell towards with the cursor's postion and the enemy's position. Then,use
+  the direction to figure out the x and y speed of the shell.However, it have 
+  some error. I debugged for a long time and finally found the reason. It is 
+  because my variables centerx and centery are int type.But the variables speedx
+  and speedy are decimal. Then at every frame, it will produce a bit error when
+  I convert the result to int.Therefore, after several frames, the error will 
+  be accumulated and become larger.
+  My solution is: set two variables realx and realy with the type double. Use
+  them to calculate and record the  real position of the shell. And before I have
+  to draw the image, I assign them to centerx and centery. With this methord, I
+  can make the error range within one pixel.
+
+
+HOW WOULD I DO THINGS DIFFERENTLY NEXT TIME
+===========================================
+
+	 In this game, the action of the enemies are randomly excapt the shooting 
+toward helicopter.Next time, I think I will make the game's artificial 
+intelligence better.
+
+
+WHAT I LEARNED
+==============
+I learn so much in this project:
+
+1. How to design the game before programming.
+
+2. How to manage my code.
+
+3. How to update my game gradually and finally arrive at the complete game.
+
+4. Certainly, how to programming game using pygame.
+
+
+
+
+
+
+
+
